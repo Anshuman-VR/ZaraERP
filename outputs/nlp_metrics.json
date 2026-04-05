@@ -1,0 +1,7 @@
+{
+  "lr_accuracy": 0.8902,
+  "lr_f1": 0.8949,
+  "lr_precision": 0.9046,
+  "lr_recall": 0.8902,
+  "bert_f1": null
+}

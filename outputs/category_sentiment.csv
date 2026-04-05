@@ -1,0 +1,21 @@
+department,class_name,avg_sentiment,weighted_sentiment,recommend_rate,avg_rating,review_count,top_complaint,top_praise
+Bottoms,Casual bottoms,0.5418,0.0,1.0,4.0,1,,bit short
+Bottoms,Jeans,0.7561,0.4839,0.8795,4.3478,1104,pair jean,love jean
+Bottoms,Pants,0.7494,0.5804,0.8326,4.2615,1350,run small,love pant
+Bottoms,Shorts,0.7328,0.4959,0.8388,4.2533,304,fabric quality,love short
+Bottoms,Skirts,0.7548,0.6108,0.8416,4.2292,903,look like,love skirt
+Dresses,Dresses,0.7393,0.6066,0.8052,4.1388,6145,look like,love dress
+Intimate,Chemises,0.8126,0.0,1.0,4.0,1,,ankle boot
+Intimate,Intimates,0.7371,0.2922,0.8571,4.2789,147,itchy tag,fit perfectly
+Intimate,Layering,0.7487,0.4163,0.8788,4.3485,132,excess fabric,super soft
+Intimate,Legwear,0.7372,0.4548,0.8544,4.2468,158,good quality,great legging
+Intimate,Lounge,0.7281,0.5491,0.858,4.3019,669,beach cover,true size
+Intimate,Sleep,0.717,0.4233,0.8551,4.2944,214,looked like,sleep pant
+Intimate,Swim,0.7346,0.581,0.7952,4.1717,332,bathing suit,bathing suit
+Jackets,Jackets,0.7443,0.5966,0.8433,4.2884,683,looked like,love jacket
+Jackets,Outerwear,0.7368,0.5456,0.8119,4.1818,319,look like,love coat
+Tops,Blouses,0.7529,0.6339,0.8066,4.1428,2983,wanted love,true size
+Tops,Fine gauge,0.7303,0.4763,0.8329,4.238,1059,look like,true size
+Tops,Knits,0.7416,0.5254,0.8124,4.1457,4626,look like,true size
+Tops,Sweaters,0.7137,0.5211,0.7971,4.1688,1380,look like,love sweater
+Trend,Trend,0.6308,0.6274,0.7458,3.839,118,look like,look like
