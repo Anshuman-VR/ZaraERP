@@ -45,9 +45,11 @@ ZaraERP/
 ## ⚙️ Setup & Execution
 
 ### 1. Requirements
-Ensure you have the following installed:
-*   Python 3.10+
-*   FastAPI, Uvicorn, Pandas, Scikit-learn, XGBoost, Joblib, VaderSentiment
+Ensure you have Python 3.10+ installed. Install all dependencies using the provided package list:
+
+```powershell
+pip install -r requirements.txt
+```
 
 ### 2. Launch Backend
 Run the FastAPI server to handle real-time AI inference:
