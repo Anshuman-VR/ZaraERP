@@ -162,6 +162,16 @@ def predict_demand(inp: DemandInput):
     pred = float(demand_model.predict(X)[0])
     return {"prediction": pred}
 
+@app.post("/predict/debug")
+def predict_debug(inp: DemandInput):
+    X = build_demand_features(inp.data)
+    # Return the raw feature dictionary and the resulting scaled vector
+    return {
+        "raw_input": inp.data,
+        "scaled_vector": X.tolist(),
+        "prediction": float(demand_model.predict(X)[0])
+    }
+
 
 @app.post("/predict/nlp")
 def predict_nlp(inp: NLPInput):

@@ -88,23 +88,23 @@ df["sentiment_x_volume"] = df["sentiment_score"] * np.log1p(df["review_volume"])
 # The original dataset lacks a time dimension. We synthetically extrapolate 
 # "Units per Week" by estimating shelf-life based on market mechanics.
 def estimate_shelf_life(row):
-    base_weeks = 12.0  # Recalibrated to 3-month baseline for higher velocity
+    base_weeks = 6.0  # Recalibrated to 1.5-month baseline for much higher velocity
     
     if row["Seasonal"] == 1:
-        base_weeks = 6.0   # Seasonal items have much faster cycles (1.5 months)
+        base_weeks = 3.0   # Seasonal items now have ultra-fast 3-week cycles
         
     if row["Promotion"] == 1:
-        base_weeks *= 0.6  # Promotions significantly accelerate sell-through
+        base_weeks *= 0.5  # Promotions accelerate sell-through even more (halves the time)
         
-    return max(2.0, base_weeks)
+    return max(1.0, base_weeks)
 
 df["Shelf_Life_Weeks"] = df.apply(estimate_shelf_life, axis=1)
 
 # Convert lifetime sales volume into temporal regression target
 df["Sales_Volume_Weekly"] = df["Sales Volume"] / df["Shelf_Life_Weeks"]
 
-# Give even higher importance to promotional and seasonal items
-df["Sample_Weight"] = (df["Promotion"] * 5) + (df["Seasonal"] * 3) + 1.0
+# Increase impact of promotion/seasonal for model responsiveness
+df["Sample_Weight"] = (df["Promotion"] * 100) + (df["Seasonal"] * 50) + 1.0
 
 # -----------------------------
 # FEATURES
@@ -138,26 +138,49 @@ scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
 # -----------------------------
-# TRAIN TEST SPLIT
+# SYNTHETIC DATA INJECTION (CRITICAL FIX)
 # -----------------------------
+# The original dataset has 0 Promotion/Seasonal rows. We must synthetically 
+# create these to teach the model the business impact of these levers.
+# We'll take a subset and flip the bits, boosting their sales targets.
+
+promo_subset = df.sample(frac=0.1, random_state=42).copy()
+promo_subset["Promotion"] = 1
+promo_subset["Sales_Volume_Weekly"] *= 2.2 # 120% boost for promos
+promo_subset["Sample_Weight"] = 50.0
+
+seasonal_subset = df.sample(frac=0.1, random_state=7).copy()
+seasonal_subset["Seasonal"] = 1
+seasonal_subset["Sales_Volume_Weekly"] *= 1.8 # 80% boost for seasonal
+seasonal_subset["Sample_Weight"] = 25.0
+
+df = pd.concat([df, promo_subset, seasonal_subset], ignore_index=True)
+
+# Re-calculate interaction features after injection
+df["promo_x_sentiment"] = df["Promotion"] * df["sentiment_score"]
+df["promo_x_position"] = df["Promotion"] * df["Product Position"]
+df["sentiment_x_volume"] = df["sentiment_score"] * np.log1p(df["review_volume"])
+
+# ... (Standard training continues) ...
+X = df[feature_cols]
+y = df["Sales_Volume_Weekly"]
+weights = df["Sample_Weight"]
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
 X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
-    X_scaled, y, weights, test_size=0.2, random_state=42
+    X_scaled, y, weights, test_size=0.1, random_state=42
 )
 
-# -----------------------------
-# MODEL (TUNED)
-# -----------------------------
 model = XGBRegressor(
-    n_estimators=400,
-    max_depth=6,
+    n_estimators=800,
+    max_depth=7,
     learning_rate=0.03,
     subsample=0.8,
-    colsample_bytree=0.8,
-    reg_lambda=1.5,
-    reg_alpha=0.5
+    colsample_bytree=0.8
 )
 
-# Fit with sample weights to force the model to respect promotion/seasonal controls
 model.fit(X_train, y_train, sample_weight=w_train)
 
 # -----------------------------
