@@ -1,0 +1,57 @@
+{
+  "summary": {
+    "top_categories": [
+      {
+        "category": "sweaters",
+        "Sales Volume": 1104.925698495548,
+        "avg_sentiment": 0.7566263768115942,
+        "recommend_rate": 0.7971014492753623,
+        "review_count": 1380.0,
+        "demand_score": 0.9999999402106873,
+        "final_score": 5.470834473974035
+      },
+      {
+        "category": "jackets",
+        "Sales Volume": 1099.4219946571684,
+        "avg_sentiment": 0.7866863836017569,
+        "recommend_rate": 0.8433382137628112,
+        "review_count": 683.0,
+        "demand_score": 0.6709372705332949,
+        "final_score": 3.4455685675827237
+      },
+      {
+        "category": "jeans",
+        "Sales Volume": 1094.5493171471928,
+        "avg_sentiment": 0.7926944746376813,
+        "recommend_rate": 0.8795289855072463,
+        "review_count": 1104.0,
+        "demand_score": 0.3796032313126025,
+        "final_score": 2.1086527841751637
+      }
+    ],
+    "risk_categories": [],
+    "opportunity_categories": [
+      {
+        "category": "jeans",
+        "Sales Volume": 1094.5493171471928,
+        "avg_sentiment": 0.7926944746376813,
+        "recommend_rate": 0.8795289855072463,
+        "review_count": 1104.0,
+        "demand_score": 0.3796032313126025,
+        "final_score": 2.1086527841751637
+      }
+    ]
+  },
+  "model_insights": {
+    "xgb_r2": 0.9349,
+    "rmse": 74.1675,
+    "top_driver": "Promotion",
+    "driver_importance": 0.810221
+  },
+  "nlp_insights": {
+    "best_model": "TFIDF_LR",
+    "accuracy": 0.9027839151568714,
+    "f1": 0.9386845039018952,
+    "roc_auc": 0.9523419504297578
+  }
+}

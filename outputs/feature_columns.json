@@ -1,0 +1,15 @@
+[
+    "Promotion",
+    "Seasonal",
+    "price_log",
+    "Product Position",
+    "section",
+    "sentiment_score",
+    "recommend_prob",
+    "review_volume",
+    "weighted_sentiment",
+    "price_x_sentiment",
+    "promo_x_sentiment",
+    "promo_x_position",
+    "sentiment_x_volume"
+]

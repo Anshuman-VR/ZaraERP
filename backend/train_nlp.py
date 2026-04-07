@@ -1,265 +1,229 @@
-"""
-ZaraIQ ERP — Team 2: NLP Training Script
-=========================================
-Run this ONCE from the project root:
-    python backend/train_nlp.py
-
-Produces all 6 required outputs in /outputs:
-    - outputs/nlp_model.pkl
-    - outputs/nlp_vectorizer.pkl
-    - outputs/sentiment_model.pkl
-    - outputs/nlp_metrics.json
-    - outputs/reviews_processed.csv
-    - outputs/category_sentiment.csv
-"""
-
 import os
-import re
 import json
-import joblib
-import warnings
-import pandas as pd
+import re
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
+from sklearn.model_selection import train_test_split, cross_val_score, learning_curve
+from sklearn.metrics import (
+    accuracy_score, f1_score, precision_score, recall_score,
+    confusion_matrix, roc_auc_score, precision_recall_curve, auc
+)
 from sklearn.linear_model import LogisticRegression
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import (accuracy_score, f1_score,
-                             precision_score, recall_score,
-                             confusion_matrix, classification_report)
-from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
-import nltk
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from gensim.models import Word2Vec
 
-warnings.filterwarnings("ignore")
+import joblib
+import seaborn as sns
 
-# ── Download NLTK data (safe to run multiple times) ──────────────────────────
-for pkg in ["stopwords", "wordnet", "omw-1.4"]:
-    nltk.download(pkg, quiet=True)
+# -----------------------------
+# PATHS
+# -----------------------------
+BASE = r"C:\Users\Abcom\Desktop\Work\Code Projects\ZaraERP"
+DATA_PATH = os.path.join(BASE, "data", "womenReview.csv")
+OUTPUT_PATH = os.path.join(BASE, "outputs")
+PLOT_PATH = os.path.join(OUTPUT_PATH, "vader_analysis")
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
-DATA_PATH    = os.path.join("data", "womenReview.csv")
-OUTPUTS_DIR  = "outputs"
-os.makedirs(OUTPUTS_DIR, exist_ok=True)
+os.makedirs(PLOT_PATH, exist_ok=True)
 
-# =============================================================================
-# STEP 1 — Load & Clean
-# =============================================================================
-print("\n[1/6] Loading data...")
+# -----------------------------
+# LOAD DATA
+# -----------------------------
 df = pd.read_csv(DATA_PATH)
-print(f"      Raw shape: {df.shape}")
 
-# Drop the artifact index column
-if "Unnamed: 0" in df.columns:
-    df.drop(columns=["Unnamed: 0"], inplace=True)
-
-# Fill Title NAs with empty string
+df = df.drop(columns=["Unnamed: 0"], errors="ignore")
 df["Title"] = df["Title"].fillna("")
+df = df.dropna(subset=["Review Text", "Department Name", "Class Name"])
 
-# Drop rows with null Review Text (845 rows per PDR)
-df.dropna(subset=["Review Text"], inplace=True)
+df["text"] = df["Title"] + " " + df["Review Text"]
 
-# Drop rows with null Division / Department / Class (14 rows per PDR)
-df.dropna(subset=["Division Name", "Department Name", "Class Name"], inplace=True)
+# -----------------------------
+# CLEANING FUNCTIONS
+# -----------------------------
+def clean_text(text):
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9\s!]", " ", text)
+    return text
 
-# Reset index after drops
-df.reset_index(drop=True, inplace=True)
-print(f"      Clean shape: {df.shape}")
+def clean_for_vader(text):
+    return str(text).replace("n't", " not")
 
-# =============================================================================
-# STEP 2 — Text Preprocessing
-# =============================================================================
-print("\n[2/6] Preprocessing text...")
+df["clean_text"] = df["text"].apply(clean_text)
+df["vader_text"] = df["text"].apply(clean_for_vader)
 
-stop_words  = set(stopwords.words("english"))
-lemmatizer  = WordNetLemmatizer()
+# -----------------------------
+# VADER SETUP
+# -----------------------------
+analyzer = SentimentIntensityAnalyzer()
 
-def clean_text(title: str, review: str) -> str:
-    """Concatenate title + review, lowercase, strip punctuation,
-    remove stopwords, lemmatize."""
-    combined = f"{title} {review}".lower()
-    # Remove punctuation and digits
-    combined = re.sub(r"[^a-z\s]", " ", combined)
-    tokens   = combined.split()
-    tokens   = [lemmatizer.lemmatize(t) for t in tokens if t not in stop_words and len(t) > 2]
-    return " ".join(tokens)
+custom_words = {
+    "runs small": -2.0,
+    "runs large": -1.5,
+    "poor quality": -2.5,
+    "cheap material": -2.0,
+    "perfect fit": 2.5,
+    "high quality": 2.5,
+    "very comfortable": 2.0,
+}
+analyzer.lexicon.update(custom_words)
 
-df["clean_text"] = df.apply(
-    lambda row: clean_text(row["Title"], row["Review Text"]), axis=1
-)
-print("      Text cleaning done.")
+def vader_score(text):
+    return analyzer.polarity_scores(text)["compound"]
 
-# =============================================================================
-# STEP 3 — TF-IDF + Logistic Regression Classifier
-# =============================================================================
-print("\n[3/6] Training TF-IDF + Logistic Regression...")
+df["sentiment_score"] = df["vader_text"].apply(vader_score)
 
-X = df["clean_text"]
+def vader_label(score):
+    if score >= 0.2:
+        return "positive"
+    elif score <= -0.2:
+        return "negative"
+    return "neutral"
+
+df["sentiment_label"] = df["sentiment_score"].apply(vader_label)
+
+# -----------------------------
+# TF-IDF MODEL
+# -----------------------------
+vectorizer = TfidfVectorizer(max_features=10000, ngram_range=(1,2))
+X_tfidf = vectorizer.fit_transform(df["clean_text"])
 y = df["Recommended IND"]
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.20, random_state=42, stratify=y
+    X_tfidf, y, test_size=0.2, stratify=y, random_state=42
 )
 
-# Build sklearn Pipeline (vectorizer + classifier together)
-pipeline = Pipeline([
-    ("tfidf", TfidfVectorizer(max_features=10000, ngram_range=(1, 2))),
-    ("lr",    LogisticRegression(
-                  C=2.0,
-                  solver="lbfgs",
-                  max_iter=1000,
-                  class_weight="balanced",
-                  random_state=42
-              ))
-])
+lr = LogisticRegression(max_iter=1000, class_weight="balanced", C=2.0)
+lr.fit(X_train, y_train)
 
-pipeline.fit(X_train, y_train)
-y_pred = pipeline.predict(X_test)
-y_prob = pipeline.predict_proba(X_test)[:, 1]
+y_pred = lr.predict(X_test)
+y_prob = lr.predict_proba(X_test)[:,1]
 
-acc  = accuracy_score(y_test, y_pred)
-f1   = f1_score(y_test, y_pred, average="weighted")
-prec = precision_score(y_test, y_pred, average="weighted")
-rec  = recall_score(y_test, y_pred, average="weighted")
+# -----------------------------
+# WORD2VEC MODEL
+# -----------------------------
+sentences = [text.split() for text in df["clean_text"]]
 
-print(f"      Accuracy : {acc:.4f}")
-print(f"      F1       : {f1:.4f}")
-print(f"      Precision: {prec:.4f}")
-print(f"      Recall   : {rec:.4f}")
-print("\n" + classification_report(y_test, y_pred))
+w2v = Word2Vec(sentences, vector_size=100, window=5, min_count=2)
 
-# Save the full pipeline as nlp_model.pkl
-nlp_model_path = os.path.join(OUTPUTS_DIR, "nlp_model.pkl")
-joblib.dump(pipeline, nlp_model_path)
-print(f"      Saved → {nlp_model_path}")
+def get_vec(text):
+    words = text.split()
+    vecs = [w2v.wv[w] for w in words if w in w2v.wv]
+    return np.mean(vecs, axis=0) if vecs else np.zeros(100)
 
-# Also save the vectorizer separately (as required by PDR output contract)
-nlp_vec_path = os.path.join(OUTPUTS_DIR, "nlp_vectorizer.pkl")
-joblib.dump(pipeline.named_steps["tfidf"], nlp_vec_path)
-print(f"      Saved → {nlp_vec_path}")
+X_vec = np.vstack(df["clean_text"].apply(get_vec))
+X_vec = np.hstack([X_vec, df["sentiment_score"].values.reshape(-1,1)])
 
-# Save metrics JSON
+X_train_v, X_test_v, y_train_v, y_test_v = train_test_split(
+    X_vec, y, test_size=0.2, stratify=y, random_state=42
+)
+
+lr_vec = LogisticRegression(max_iter=1000, class_weight="balanced")
+lr_vec.fit(X_train_v, y_train_v)
+
+y_pred_v = lr_vec.predict(X_test_v)
+y_prob_v = lr_vec.predict_proba(X_test_v)[:,1]
+
+# -----------------------------
+# METRICS
+# -----------------------------
 metrics = {
-    "lr_accuracy":  round(acc,  4),
-    "lr_f1":        round(f1,   4),
-    "lr_precision": round(prec, 4),
-    "lr_recall":    round(rec,  4),
-    "bert_f1":      None          # DistilBERT stretch goal — not trained
+    "lr_accuracy": float(accuracy_score(y_test, y_pred)),
+    "lr_f1": float(f1_score(y_test, y_pred)),
+    "lr_precision": float(precision_score(y_test, y_pred)),
+    "lr_recall": float(recall_score(y_test, y_pred)),
+    "lr_auc": float(roc_auc_score(y_test, y_prob)),
+    "w2v_f1": float(f1_score(y_test_v, y_pred_v)),
+    "w2v_auc": float(roc_auc_score(y_test_v, y_prob_v)),
+    "vader_auc": float(roc_auc_score(y, df["sentiment_score"]))
 }
-metrics_path = os.path.join(OUTPUTS_DIR, "nlp_metrics.json")
-with open(metrics_path, "w") as f:
-    json.dump(metrics, f, indent=2)
-print(f"      Saved → {metrics_path}")
 
-# =============================================================================
-# STEP 4 — VADER Sentiment on All Reviews
-# =============================================================================
-print("\n[4/6] Running VADER sentiment analysis...")
+with open(os.path.join(OUTPUT_PATH, "nlp_metrics.json"), "w") as f:
+    json.dump(metrics, f, indent=4)
 
-vader = SentimentIntensityAnalyzer()
+# -----------------------------
+# CONFUSION MATRIX
+# -----------------------------
+cm = confusion_matrix(y_test, y_pred)
+sns.heatmap(cm, annot=True, fmt="d")
+plt.savefig(os.path.join(PLOT_PATH, "B1_confusion_matrix.png"))
+plt.clf()
 
-def vader_compound(text: str) -> float:
-    return vader.polarity_scores(str(text))["compound"]
+# -----------------------------
+# ROC + PR CURVE
+# -----------------------------
+fpr, tpr, _ = precision_recall_curve(y_test, y_prob)
+plt.plot(tpr, fpr)
+plt.savefig(os.path.join(PLOT_PATH, "B2_roc_pr_curves.png"))
+plt.clf()
 
-df["sentiment_score"]       = df["Review Text"].apply(vader_compound)
-df["sentiment_label"]       = df["sentiment_score"].apply(
-    lambda s: "positive" if s >= 0.05 else ("negative" if s <= -0.05 else "neutral")
+# -----------------------------
+# LEARNING CURVE
+# -----------------------------
+train_sizes, train_scores, test_scores = learning_curve(
+    lr, X_tfidf, y, cv=5
 )
 
-# Weighted sentiment: vader_compound × log1p(Positive Feedback Count)
-df["weighted_sentiment"]    = (
-    df["sentiment_score"] * np.log1p(df["Positive Feedback Count"].fillna(0))
-)
+plt.plot(train_sizes, np.mean(train_scores, axis=1))
+plt.plot(train_sizes, np.mean(test_scores, axis=1))
+plt.savefig(os.path.join(PLOT_PATH, "C_learning_curves.png"))
+plt.clf()
 
-# Add predicted_recommend from the trained LR pipeline
-df["predicted_recommend"]   = pipeline.predict(df["clean_text"])
-df["recommend_probability"] = pipeline.predict_proba(df["clean_text"])[:, 1]
+# -----------------------------
+# CORRELATION MATRIX
+# -----------------------------
+corr = df[["Age", "Positive Feedback Count", "sentiment_score", "Recommended IND"]].corr()
+sns.heatmap(corr, annot=True)
+plt.savefig(os.path.join(PLOT_PATH, "A3_recommend_rate_and_correlation.png"))
+plt.clf()
 
-# Save VADER model
-sentiment_model_path = os.path.join(OUTPUTS_DIR, "sentiment_model.pkl")
-joblib.dump(vader, sentiment_model_path)
-print(f"      Saved → {sentiment_model_path}")
+# -----------------------------
+# SAVE MODELS
+# -----------------------------
+joblib.dump(lr, os.path.join(OUTPUT_PATH, "nlp_model.pkl"))
+joblib.dump(vectorizer, os.path.join(OUTPUT_PATH, "nlp_vectorizer.pkl"))
+joblib.dump(analyzer, os.path.join(OUTPUT_PATH, "sentiment_model.pkl"))
 
-# Save reviews_processed.csv
-reviews_path = os.path.join(OUTPUTS_DIR, "reviews_processed.csv")
-df.to_csv(reviews_path, index=False)
-print(f"      Saved → {reviews_path}  ({len(df):,} rows)")
+# -----------------------------
+# SAVE PROCESSED DATA
+# -----------------------------
+df["predicted_recommend"] = lr.predict(X_tfidf)
+df.to_csv(os.path.join(OUTPUT_PATH, "reviews_processed.csv"), index=False)
 
-# =============================================================================
-# STEP 5 — Category-Level Aggregation → category_sentiment.csv
-# =============================================================================
-print("\n[5/6] Building category_sentiment aggregation...")
+# -----------------------------
+# CATEGORY AGGREGATION
+# -----------------------------
+agg = df.groupby(["Department Name", "Class Name"]).agg(
+    avg_sentiment=("sentiment_score", "mean"),
+    weighted_sentiment=("sentiment_score", lambda x: np.mean(x * np.log1p(df.loc[x.index, "Positive Feedback Count"]))),
+    recommend_rate=("Recommended IND", "mean"),
+    avg_rating=("Rating", "mean"),
+    review_count=("Rating", "count")
+).reset_index()
 
-def top_ngram(sub_df: pd.DataFrame, stars: list, n: int = 2, top_k: int = 1) -> str:
-    """
-    Extract the most frequent n-gram from reviews with given star ratings.
-    Returns the top phrase as a string, or '' if nothing found.
-    """
-    from sklearn.feature_extraction.text import CountVectorizer
-    texts = sub_df[sub_df["Rating"].isin(stars)]["clean_text"].dropna().tolist()
-    if not texts:
-        return ""
-    try:
-        cv = CountVectorizer(ngram_range=(n, n), max_features=500, stop_words="english")
-        cv.fit_transform(texts)
-        freq = dict(zip(cv.get_feature_names_out(),
-                        cv.transform(texts).toarray().sum(axis=0)))
-        if not freq:
-            return ""
-        top = sorted(freq, key=freq.get, reverse=True)[:top_k]
-        return ", ".join(top)
-    except Exception:
-        return ""
+agg.to_csv(os.path.join(OUTPUT_PATH, "category_sentiment.csv"), index=False)
 
-records = []
-grouped = df.groupby(["Department Name", "Class Name"])
+print("✅ ALL TASKS COMPLETE")
 
-for (dept, cls), grp in grouped:
-    record = {
-        "department":        dept,
-        "class_name":        cls,
-        "avg_sentiment":     round(grp["sentiment_score"].mean(), 4),
-        "weighted_sentiment":round(grp["weighted_sentiment"].mean(), 4),
-        "recommend_rate":    round(grp["Recommended IND"].mean(), 4),
-        "avg_rating":        round(grp["Rating"].mean(), 4),
-        "review_count":      len(grp),
-        "top_complaint":     top_ngram(grp, stars=[1, 2]),
-        "top_praise":        top_ngram(grp, stars=[4, 5]),
-    }
-    records.append(record)
 
-cat_df = pd.DataFrame(records)
-cat_path = os.path.join(OUTPUTS_DIR, "category_sentiment.csv")
-cat_df.to_csv(cat_path, index=False)
-print(f"      Saved → {cat_path}  ({len(cat_df)} categories)")
+# -----------------------------
+# ADD PROBABILITY OUTPUT
+# -----------------------------
+df["recommend_prob"] = lr.predict_proba(X_tfidf)[:,1]
 
-# =============================================================================
-# STEP 6 — Verification Summary
-# =============================================================================
-print("\n[6/6] Output verification:")
-expected = [
-    "nlp_model.pkl",
-    "nlp_vectorizer.pkl",
-    "sentiment_model.pkl",
-    "nlp_metrics.json",
-    "reviews_processed.csv",
-    "category_sentiment.csv",
-]
-all_ok = True
-for fname in expected:
-    path  = os.path.join(OUTPUTS_DIR, fname)
-    exists = os.path.exists(path)
-    size  = os.path.getsize(path) if exists else 0
-    status = "✓" if exists else "✗ MISSING"
-    print(f"      {status}  {fname}  ({size:,} bytes)")
-    if not exists:
-        all_ok = False
+# -----------------------------
+# AGGREGATED NLP FEATURES (FOR DEMAND MODEL)
+# -----------------------------
+nlp_agg = df.groupby(["Department Name", "Class Name"]).agg(
+    sentiment_score=("sentiment_score", "mean"),
+    recommend_prob=("recommend_prob", "mean"),
+    review_volume=("Review Text", "count"),
+    weighted_sentiment=("sentiment_score", lambda x: np.mean(x * np.log1p(df.loc[x.index, "Positive Feedback Count"])))
+).reset_index()
 
-if all_ok:
-    print("\n✅  All Team 2 outputs generated successfully.")
-    print("    Next step: run  python backend/predict.py  to test inference.")
-else:
-    print("\n❌  Some outputs are missing — check errors above.")
+nlp_agg.to_csv(os.path.join(OUTPUT_PATH, "nlp_features.csv"), index=False)
+
+print("✅ NLP FEATURES SAVED")
