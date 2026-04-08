@@ -51,10 +51,11 @@ df["review_volume"] = df["review_volume"].fillna(0)
 df["weighted_sentiment"] = df["weighted_sentiment"].fillna(0)
 
 # -----------------------------
-# FIX DATA TYPES
+# FIX DATA TYPES (MAPPING YES/NO)
 # -----------------------------
-df["Promotion"] = pd.to_numeric(df["Promotion"], errors="coerce").fillna(0)
-df["Seasonal"] = pd.to_numeric(df["Seasonal"], errors="coerce").fillna(0)
+# The original dataset uses "Yes"/"No" strings. pd.to_numeric fails on these.
+df["Promotion"] = df["Promotion"].map({"Yes": 1, "No": 0}).fillna(0).astype(int)
+df["Seasonal"] = df["Seasonal"].map({"Yes": 1, "No": 0}).fillna(0).astype(int)
 
 # Encode Product Position properly
 df["Product Position"] = df["Product Position"].astype("category").cat.codes
@@ -138,30 +139,12 @@ scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
 # -----------------------------
-# SYNTHETIC DATA INJECTION (CRITICAL FIX)
+# TRAINING (NATURAL DATA)
 # -----------------------------
-# The original dataset has 0 Promotion/Seasonal rows. We must synthetically 
-# create these to teach the model the business impact of these levers.
-# We'll take a subset and flip the bits, boosting their sales targets.
+# Now that "Yes/No" is fixed, we have 8,440 natural promotional rows.
+# No synthetic injection needed. Just a light weight boost for visibility.
+df["Sample_Weight"] = (df["Promotion"] * 2.0) + (df["Seasonal"] * 1.5) + 1.0
 
-promo_subset = df.sample(frac=0.1, random_state=42).copy()
-promo_subset["Promotion"] = 1
-promo_subset["Sales_Volume_Weekly"] *= 2.2 # 120% boost for promos
-promo_subset["Sample_Weight"] = 50.0
-
-seasonal_subset = df.sample(frac=0.1, random_state=7).copy()
-seasonal_subset["Seasonal"] = 1
-seasonal_subset["Sales_Volume_Weekly"] *= 1.8 # 80% boost for seasonal
-seasonal_subset["Sample_Weight"] = 25.0
-
-df = pd.concat([df, promo_subset, seasonal_subset], ignore_index=True)
-
-# Re-calculate interaction features after injection
-df["promo_x_sentiment"] = df["Promotion"] * df["sentiment_score"]
-df["promo_x_position"] = df["Promotion"] * df["Product Position"]
-df["sentiment_x_volume"] = df["sentiment_score"] * np.log1p(df["review_volume"])
-
-# ... (Standard training continues) ...
 X = df[feature_cols]
 y = df["Sales_Volume_Weekly"]
 weights = df["Sample_Weight"]
@@ -174,9 +157,9 @@ X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
 )
 
 model = XGBRegressor(
-    n_estimators=800,
-    max_depth=7,
-    learning_rate=0.03,
+    n_estimators=1000,
+    max_depth=6,
+    learning_rate=0.05,
     subsample=0.8,
     colsample_bytree=0.8
 )

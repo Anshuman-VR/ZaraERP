@@ -493,12 +493,12 @@
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Price (€)</label>
-            <input type="range" id="d-price" min="10" max="200" value="50" oninput="document.getElementById('d-price-val').textContent='€'+this.value">
+            <label class="form-label">Price ($)</label>
+            <input type="range" id="d-price" min="10" max="200" value="50" oninput="document.getElementById('d-price-val').textContent='$'+this.value">
             <div style="display:flex;justify-content:space-between;margin-top:6px;">
-              <span style="font-size:11px;color:var(--muted)">€10</span>
-              <span id="d-price-val" class="range-val">€50</span>
-              <span style="font-size:11px;color:var(--muted)">€200</span>
+              <span style="font-size:11px;color:var(--muted)">$10</span>
+              <span id="d-price-val" class="range-val">$50</span>
+              <span style="font-size:11px;color:var(--muted)">$200</span>
             </div>
           </div>
           <div class="form-group">
@@ -846,7 +846,7 @@
           <select class="form-select" id="u-class"></select>
         </div>
         <div class="form-group" style="margin-bottom:0">
-          <label class="form-label">Price Point (€)</label>
+          <label class="form-label">Price Point ($)</label>
           <input type="number" class="form-input" id="u-price" value="59" min="10" max="200">
         </div>
         <div class="form-group" style="margin-bottom:0">
@@ -1001,7 +1001,7 @@ async function runDemandPrediction() {
   if (price > 1000) {
       document.getElementById("demand-loading").style.display = "none";
       document.getElementById("demand-result").style.display = "block";
-      document.getElementById("demand-result").innerHTML = "<div style='background:rgba(255,50,50,0.1);color:var(--red);padding:20px;border-radius:8px;font-weight:bold;margin:20px 0;'>Error: Price significantly exceeds expected retail bounds (&lt;€1000). Please enter a realistic model prediction parameter.</div>";
+      document.getElementById("demand-result").innerHTML = "<div style='background:rgba(255,50,50,0.1);color:var(--red);padding:20px;border-radius:8px;font-weight:bold;margin:20px 0;'>Error: Price significantly exceeds expected retail bounds (&lt;$1000). Please enter a realistic model prediction parameter.</div>";
       return;
   }
 
